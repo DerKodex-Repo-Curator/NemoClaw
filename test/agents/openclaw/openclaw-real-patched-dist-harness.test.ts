@@ -22,6 +22,8 @@ import { runRealOpenClawDeviceSelfApprovalProof } from "../../helpers/openclaw-r
 import { runRealOpenClawInstallPathProof } from "../../helpers/openclaw-real-install-path-proof";
 import { runRealOpenClawMcpStartRetryProof } from "../../helpers/openclaw-real-mcp-start-retry-proof";
 
+import { patchOpenClawAgentMessageInput } from "../../../scripts/lib/patch-openclaw-agent-message-input.mts";
+
 const REPO_ROOT = path.join(import.meta.dirname, "../../..");
 const DOCKERFILE = path.join(REPO_ROOT, "Dockerfile");
 const PATCH_OPENCLAW_ISSUE_4434_DIAGNOSTICS = path.join(
@@ -703,6 +705,9 @@ describe.skipIf(process.env.NEMOCLAW_REAL_OPENCLAW_DIST_HARNESS !== "1")(
         } finally {
           process.env.PATH = previousPath;
         }
+
+        patchOpenClawAgentMessageInput(dist);
+        patchOpenClawAgentMessageInput(dist, true);
 
         patchOpenClawContainerRestart(dist);
         patchOpenClawContainerRestart(dist, true);
