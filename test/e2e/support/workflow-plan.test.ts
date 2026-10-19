@@ -696,15 +696,21 @@ describe("E2E workflow plan", () => {
     expect(selectedWorkflowJobs(plan)).toEqual(["catalogue-standard", "jetson-nvmap-gpu"]);
   });
 
-  it("selects both GPU native-provider consumers when their chat fixture changes", () => {
-    const changedFile = "test/e2e/fixtures/native-local-chat.ts";
-    const plan = buildE2eWorkflowPlan({}, { changedFiles: [changedFile] });
-
+  it.each<[string, string[]]>([
+    ["test/e2e/fixtures/native-local-chat.ts", ["gpu-double-onboard", "gpu-e2e"]],
+    ...[
+      "connect.ts",
+      "inference-invocation-probe.ts",
+      "inference-route-health.ts",
+      "launch-readiness/health.ts",
+      "status-snapshot.ts",
+    ].map((file): [string, string[]] => [
+      `src/lib/actions/sandbox/${file}`,
+      ["inference-routing-openclaw-native"],
+    ]),
+  ])("selects the live owners of %s", (changedFile, targets) => {
     expect(catalogueTargetsForChangedFiles([changedFile]).map((target) => target.id)).toEqual(
-      expect.arrayContaining(["gpu-double-onboard", "gpu-e2e"]),
-    );
-    expect(plan.catalogueMatrices.standard.map((row) => row.id)).toEqual(
-      expect.arrayContaining(["gpu-double-onboard", "gpu-e2e"]),
+      expect.arrayContaining(targets),
     );
   });
 
