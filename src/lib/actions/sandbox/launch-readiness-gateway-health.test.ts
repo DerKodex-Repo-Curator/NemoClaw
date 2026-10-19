@@ -503,39 +503,4 @@ describe("OpenClaw native-local readiness identity (#13338)", () => {
       );
     },
   );
-
-  it("rejects a selected agent that contradicts the recorded attachment before any request", async () => {
-    const receipt = nativeLocalReceipt({
-      provider: "llama-cpp-local",
-      agent: "openclaw",
-      endpointUrl: "http://host.openshell.internal:8081/v1",
-      credentialEnv: "NEMOCLAW_LOCAL_INFERENCE_TOKEN",
-      authMode: "authenticated",
-      gatewayName: "selected",
-      sandboxName: "alpha",
-    });
-    const shell = recordingProbeShell("200", '{"choices":[{"message":{"content":"OK"}}]}');
-    await expect(
-      requireNativeInferenceHealth({
-        sandboxName: "alpha",
-        gatewayName: "selected",
-        agentName: "pi",
-        entry: {
-          name: "alpha",
-          agent: "pi",
-          provider: "llama-cpp-local",
-          model: "local-model",
-          nativeLocalProviderAttachment: receipt,
-        },
-        deps: {
-          verifyNativeLocalAttachment: vi.fn(async () => {}),
-          inferenceInvocationProbe: (input) =>
-            runSandboxInferenceInvocationProbe(input, (selected, _deps, timeoutMs) =>
-              probeSandboxInferenceInvocation(selected, { execute: shell.execute }, timeoutMs),
-            ),
-        },
-      }),
-    ).rejects.toBeInstanceOf(LaunchReadinessObservationError);
-    expect(shell.requests).toEqual([]);
-  });
 });

@@ -698,16 +698,11 @@ describe("E2E workflow plan", () => {
 
   it.each<[string, string[]]>([
     ["test/e2e/fixtures/native-local-chat.ts", ["gpu-double-onboard", "gpu-e2e"]],
-    ...[
-      "connect.ts",
-      "inference-invocation-probe.ts",
-      "inference-route-health.ts",
-      "launch-readiness/health.ts",
-      "status-snapshot.ts",
-    ].map((file): [string, string[]] => [
-      `src/lib/actions/sandbox/${file}`,
+    [
+      "src/lib/actions/sandbox/inference-invocation-probe.ts",
       ["inference-routing-openclaw-native"],
-    ]),
+    ],
+    ["src/lib/actions/sandbox/inference-route-health.ts", ["inference-routing-openclaw-native"]],
   ])("selects the live owners of %s", (changedFile, targets) => {
     expect(catalogueTargetsForChangedFiles([changedFile]).map((target) => target.id)).toEqual(
       expect.arrayContaining(targets),

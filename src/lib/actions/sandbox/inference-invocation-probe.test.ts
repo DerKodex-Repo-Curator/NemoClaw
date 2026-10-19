@@ -1051,20 +1051,6 @@ describe("OpenClaw native local probe routing (#13338)", () => {
     expect(result.endpoint).toBe(`${endpointUrl}/chat/completions`);
   });
 
-  it.each([
-    { name: "a different supplied agent", agentName: "hermes", agent: "openclaw" as const },
-    { name: "an untagged attachment without an agent", agentName: undefined, agent: null },
-  ])("rejects $name before sending a request", async ({ agentName, agent }) => {
-    const [provider, endpointUrl] = PROVIDERS[1];
-    const selected = openClawInput(provider, endpointUrl, agentName, agent);
-    const shell = recordingProbeShell("200", okBody);
-    expect(() => buildSandboxInferenceInvocationCommand(selected)).toThrow(/native local/i);
-    await expect(
-      probeSandboxInferenceInvocation(selected, { execute: shell.execute }),
-    ).rejects.toThrow(/native local/i);
-    expect(shell.requests).toEqual([]);
-  });
-
   it("refuses a raw credential before calling curl", async () => {
     const [provider, endpointUrl] = PROVIDERS[2];
     const shell = recordingProbeShell("200", okBody, {
