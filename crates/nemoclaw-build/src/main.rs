@@ -215,10 +215,10 @@ struct Pins {
     #[serde(default)]
     images: std::collections::BTreeMap<String, String>,
 }
-/// A Cargo command without the package description that `cargo run` gives this
-/// tool. Cargo sets those variables per package, but some build scripts, such
-/// as ring's, rerun when an inherited CARGO_MANIFEST_DIR differs from the
-/// environment their cached output was built in.
+/// A Cargo command without the package description and OUT_DIR that `cargo run`
+/// gives this tool. Cargo sets those variables per package, but some build
+/// scripts, such as ring's, rerun when an inherited CARGO_MANIFEST_DIR or
+/// OUT_DIR differs from the environment their cached output was built in.
 fn cargo() -> Command {
     let mut command = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     for (name, _) in std::env::vars_os() {
@@ -229,6 +229,7 @@ fn cargo() -> Command {
             || name.starts_with("CARGO_BIN_")
             || name == "CARGO_CRATE_NAME"
             || name == "CARGO_PRIMARY_PACKAGE"
+            || name == "OUT_DIR"
         {
             command.env_remove(name);
         }
