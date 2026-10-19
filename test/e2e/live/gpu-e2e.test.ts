@@ -7,7 +7,6 @@ import path from "node:path";
 import { EXPORTED_VLLM_PROFILE_ID } from "../../../src/lib/config/model.ts";
 import type { V1Alpha1OllamaProxyService } from "../../../src/lib/config/v1alpha1-export.ts";
 import { cleanupLocalModelRuntimes } from "../../../src/lib/inference/local-model-profile/cleanup.ts";
-import { NATIVE_LOCAL_AUTH_HEADER_SCRIPT } from "../../../src/lib/inference/native-local/agent-config.ts";
 import { normalizeNativeLocalProviderAttachment } from "../../../src/lib/inference/native-local/contract.ts";
 import { HOST_LOCAL_VLLM_CONTAINER_NAME } from "../../../src/lib/inference/serving/vllm-host-local-lifecycle.ts";
 import { loadManagedVllmApiKey } from "../../../src/lib/inference/vllm-api-key.ts";
@@ -18,6 +17,7 @@ import { resultText } from "../fixtures/clients/index.ts";
 import { trustedSandboxShellScript } from "../fixtures/clients/sandbox.ts";
 import { parseConfigExport } from "../fixtures/phases/config-export-validation.ts";
 import { expect, test } from "../fixtures/e2e-test.ts";
+import { nativeLocalChatCommand } from "../fixtures/native-local-chat.ts";
 import {
   assertAgentExecutionSucceeded,
   assertGpuInstallProofs,
@@ -246,8 +246,9 @@ test(
     const chat = await sandbox.execShell(
       SANDBOX_NAME,
       trustedSandboxShellScript(
-        `${NATIVE_LOCAL_AUTH_HEADER_SCRIPT}; curl -sS --max-time 120 '${nativeEndpoint}/chat/completions' -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '${JSON.stringify(
-          {
+        nativeLocalChatCommand(
+          nativeEndpoint ?? "http://missing-native-local-attachment.invalid/v1",
+          JSON.stringify({
             model,
             messages: [{ role: "user", content: "Reply with exactly one word: PONG" }],
             // Keep this assertion about routed inference, not the model's reasoning-token budget.
@@ -255,8 +256,9 @@ test(
             seed: 0,
             temperature: 0,
             max_tokens: 32,
-          },
-        )}'`,
+          }),
+          "-sS",
+        ),
       ),
       { artifactName: "sandbox-native-ollama-chat", env: env(), timeoutMs: 150_000 },
     );

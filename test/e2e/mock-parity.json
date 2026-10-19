@@ -602,9 +602,11 @@
     },
     {
       "live": "test/e2e/live/gpu-double-onboard.test.ts",
+      "liveSources": ["test/e2e/fixtures/native-local-chat.ts"],
       "fast": [
         "test/e2e/support/e2e-cleanup-resources.test.ts",
         "test/e2e/support/e2e-clients.test.ts",
+        "test/e2e/support/gpu-e2e-helpers.test.ts",
         "test/helpers/e2e-answer-assertions.test.ts"
       ]
     },
@@ -612,7 +614,8 @@
       "live": "test/e2e/live/gpu-e2e.test.ts",
       "liveSources": [
         "test/e2e/live/gpu-e2e-helpers.ts",
-        "test/e2e/live/hermes-cli-adapter-live.ts"
+        "test/e2e/live/hermes-cli-adapter-live.ts",
+        "test/e2e/fixtures/native-local-chat.ts"
       ],
       "fast": [
         "src/lib/adapters/config/live-export-source-ollama.test.ts",

@@ -4,7 +4,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { NATIVE_LOCAL_AUTH_HEADER_SCRIPT } from "../../../src/lib/inference/native-local/agent-config.ts";
 import { normalizeNativeLocalProviderAttachment } from "../../../src/lib/inference/native-local/contract.ts";
 import { getSandbox } from "../../../src/lib/state/registry.ts";
 import { containsAnswer } from "../../helpers/e2e-answer-assertions.ts";
@@ -18,6 +17,7 @@ import { resultText } from "../fixtures/clients/command.ts";
 import { type HostCliClient } from "../fixtures/clients/host.ts";
 import { type SandboxClient, validateSandboxName } from "../fixtures/clients/sandbox.ts";
 import { expect, test } from "../fixtures/e2e-test.ts";
+import { nativeLocalChatCommand } from "../fixtures/native-local-chat.ts";
 import { CLI_ENTRYPOINT, REPO_ROOT } from "../fixtures/paths.ts";
 import type { ShellProbeResult } from "../fixtures/shell-probe.ts";
 
@@ -154,7 +154,7 @@ async function expectSandboxInference42(
     [
       "sh",
       "-lc",
-      `${NATIVE_LOCAL_AUTH_HEADER_SCRIPT}; curl -fsS --max-time 120 '${endpoint}/chat/completions' -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '${chatRequest(model)}' | ${parseReplyCommand()}`,
+      `${nativeLocalChatCommand(endpoint, chatRequest(model), "-fsS")} | ${parseReplyCommand()}`,
     ],
     {
       artifactName,
