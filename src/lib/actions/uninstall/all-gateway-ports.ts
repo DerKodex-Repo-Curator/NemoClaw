@@ -16,18 +16,28 @@
  * detection sees an empty host and completes the host-shared cleanup that a
  * scoped run has to skip. A port whose pass failed still counts as a live
  * sibling, so a partial sweep degrades to a scoped uninstall instead of
- * removing shared state out from under a surviving environment.
+ * removing shared state out from under a surviving environment. The shared
+ * root is listed as the default gateway only when registry or gateway-config
+ * evidence proves that environment exists (#13332).
  */
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
 
 import { type AgentBranding, getAgentBranding } from "../../cli/branding";
-import { GATEWAY_PORT } from "../../core/ports";
+import { DEFAULT_GATEWAY_PORT, GATEWAY_PORT } from "../../core/ports";
 import { spawnExitCode } from "../../core/process-exit";
 import { readLineFromStdin } from "../../core/stdin";
 import { resolveGatewayName } from "../../onboard/gateway-binding";
-import { listGatewayStateRoots, readGatewayOpenShellStateDir } from "../../state/gateway-registry";
+import { DOCKER_DRIVER_GATEWAY_CONFIG_NAME } from "../../onboard/docker-driver-gateway-config";
+import {
+  listGatewayStateRoots,
+  readGatewayOpenShellStateDir,
+  readGatewayRegistryFile,
+  registryEntryGatewayPort,
+} from "../../state/gateway-registry";
 import {
   runUninstallPlanProduction,
   type UninstallRunDeps,
@@ -62,7 +72,27 @@ export function allGatewayPortsRequested(
 }
 
 function defaultListGatewayPorts(home: string): readonly number[] {
-  return listGatewayStateRoots(home).map((root) => root.gatewayPort);
+  const roots = listGatewayStateRoots(home);
+  const sharedRoot =
+    roots.find(({ gatewayPort }) => gatewayPort === DEFAULT_GATEWAY_PORT)?.root ??
+    path.join(home, ".nemoclaw");
+  const registry = readGatewayRegistryFile(home, path.join(sharedRoot, "sandboxes.json"));
+  const hasDefaultRegistryEntry =
+    registry !== null &&
+    Object.values(registry.sandboxes).some(
+      (entry) => registryEntryGatewayPort(entry) === DEFAULT_GATEWAY_PORT,
+    );
+  const hasDefaultGatewayConfig =
+    fs.lstatSync(path.join(sharedRoot, DOCKER_DRIVER_GATEWAY_CONFIG_NAME), {
+      throwIfNoEntry: false,
+    }) !== undefined;
+
+  return roots
+    .filter(
+      ({ gatewayPort }) =>
+        gatewayPort !== DEFAULT_GATEWAY_PORT || hasDefaultRegistryEntry || hasDefaultGatewayConfig,
+    )
+    .map((root) => root.gatewayPort);
 }
 
 export function uninstallChildArgs(options: UninstallRunOptions): string[] {
