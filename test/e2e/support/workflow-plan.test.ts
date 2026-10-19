@@ -696,6 +696,18 @@ describe("E2E workflow plan", () => {
     expect(selectedWorkflowJobs(plan)).toEqual(["catalogue-standard", "jetson-nvmap-gpu"]);
   });
 
+  it("selects both GPU native-provider consumers when their chat fixture changes", () => {
+    const changedFile = "test/e2e/fixtures/native-local-chat.ts";
+    const plan = buildE2eWorkflowPlan({}, { changedFiles: [changedFile] });
+
+    expect(catalogueTargetsForChangedFiles([changedFile]).map((target) => target.id)).toEqual(
+      expect.arrayContaining(["gpu-double-onboard", "gpu-e2e"]),
+    );
+    expect(plan.catalogueMatrices.standard.map((row) => row.id)).toEqual(
+      expect.arrayContaining(["gpu-double-onboard", "gpu-e2e"]),
+    );
+  });
+
   it("selects Hermes GPU startup when its output proof changes", () => {
     const plan = buildE2eWorkflowPlan(
       {},
