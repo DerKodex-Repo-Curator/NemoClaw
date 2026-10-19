@@ -4,6 +4,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { NATIVE_LOCAL_AUTH_HEADER_SCRIPT } from "../../../src/lib/inference/native-local/agent-config.ts";
+import { normalizeNativeLocalProviderAttachment } from "../../../src/lib/inference/native-local/contract.ts";
+import { getSandbox } from "../../../src/lib/state/registry.ts";
 import { containsAnswer } from "../../helpers/e2e-answer-assertions.ts";
 import { execTimeout, testTimeout } from "../../helpers/timeouts.ts";
 import { buildAvailabilityProbeEnv } from "../fixtures/availability-env.ts";
@@ -140,12 +143,18 @@ async function expectSandboxInference42(
   model: string,
   artifactName: string,
 ): Promise<void> {
+  // OpenClaw local inference uses a sandbox-owned provider behind the auth proxy, not the shared
+  // gateway route (#13293). Re-read it after re-onboarding recreates the sandbox. A missing
+  // attachment yields an unresolvable host, which fails the request assertion below.
+  const endpoint =
+    normalizeNativeLocalProviderAttachment(getSandbox(SANDBOX_NAME)?.nativeLocalProviderAttachment)
+      ?.endpointUrl ?? "http://missing-native-local-attachment.invalid/v1";
   const response = await sandbox.exec(
     SANDBOX_NAME,
     [
       "sh",
       "-lc",
-      `curl -fsS --max-time 120 https://inference.local/v1/chat/completions -H 'Content-Type: application/json' --data '${chatRequest(model)}' | ${parseReplyCommand()}`,
+      `${NATIVE_LOCAL_AUTH_HEADER_SCRIPT}; curl -fsS --max-time 120 '${endpoint}/chat/completions' -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '${chatRequest(model)}' | ${parseReplyCommand()}`,
     ],
     {
       artifactName,
@@ -192,7 +201,7 @@ test(
         "the persisted Ollama auth-proxy token works after first onboard",
         "nemoclaw onboard --non-interactive --yes recreates the sandbox",
         "the running proxy accepts the persisted token after re-onboard and rejects unauthenticated/wrong-token requests",
-        "sandbox inference.local reaches Ollama after re-onboard",
+        "the sandbox-owned native provider reaches Ollama after first onboard and re-onboard",
       ],
     });
 
