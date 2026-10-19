@@ -19,20 +19,27 @@ const ORIGINAL_OPEN = `async function readAgentMessageFile(messageFile) {
 \t\tthrow new Error(formatMessageFileReadFailure(messageFile, err), { cause: err });
 \t}`;
 const PATCHED_OPEN = `${MARKER}
-async function readInheritedAgentMessage() {
+async function readInheritedAgentMessage(timeout) {
 \tconst chunks = [];
 \tlet size = 0;
-\tfor await (const chunk of process.stdin) {
-\t\tsize += chunk.length;
-\t\tif (size > AGENT_MESSAGE_FILE_MAX_BYTES) throw new Error("File exceeds " + AGENT_MESSAGE_FILE_MAX_BYTES + " bytes");
-\t\tchunks.push(chunk);
+\tconst seconds = Number(timeout);
+\tconst budget = Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, 2147483647) : 30000;
+\tconst timer = setTimeout(() => process.stdin.destroy(new Error("Timed out waiting for stdin; close the producer, provide --message, or set --timeout <seconds>.")), budget);
+\ttry {
+\t\tfor await (const chunk of process.stdin) {
+\t\t\tsize += chunk.length;
+\t\t\tif (size > AGENT_MESSAGE_FILE_MAX_BYTES) throw new Error("File exceeds " + AGENT_MESSAGE_FILE_MAX_BYTES + " bytes");
+\t\t\tchunks.push(chunk);
+\t\t}
+\t\treturn Buffer.concat(chunks, size);
+\t} finally {
+\t\tclearTimeout(timer);
 \t}
-\treturn Buffer.concat(chunks, size);
 }
 function borrowAgentMessageStdin() {
 \treturn { fd: 0, inheritedStdin: true, stat: async () => nemoclawStdinStat(0), close: async () => {} };
 }
-async function readAgentMessageFile(messageFile, inheritedStdin = false) {
+async function readAgentMessageFile(messageFile, inheritedStdin = false, timeout) {
 \tlet handle;
 \ttry {
 \t\thandle = inheritedStdin ? borrowAgentMessageStdin() : await fs.open(messageFile, "r");
@@ -49,12 +56,15 @@ async function readAgentMessageFile(messageFile, inheritedStdin = false) {
 \t\tif (!handle) throw new Error(formatMessageFileReadFailure(messageFile, err), { cause: err });
 \t}`;
 const ORIGINAL_MESSAGE = '\tconst message = opts.message ?? "";';
-const PATCHED_MESSAGE = `\tconst message = opts.message ?? (process.stdin.isTTY === true ? "" : await readAgentMessageFile("stdin", true));`;
+const PATCHED_MESSAGE = `\tconst message = opts.message ?? (process.stdin.isTTY === true ? "" : await readAgentMessageFile("stdin", true, opts.timeout));`;
 
 const ORIGINAL_READ =
   "buffer = await readFileDescriptorBounded(handle.fd, AGENT_MESSAGE_FILE_MAX_BYTES);";
 const PATCHED_READ =
-  "buffer = handle.inheritedStdin ? await readInheritedAgentMessage() : await readFileDescriptorBounded(handle.fd, AGENT_MESSAGE_FILE_MAX_BYTES);";
+  "buffer = handle.inheritedStdin ? await readInheritedAgentMessage(timeout) : await readFileDescriptorBounded(handle.fd, AGENT_MESSAGE_FILE_MAX_BYTES);";
+
+const ORIGINAL_FILE = "await readAgentMessageFile(messageFile);";
+const PATCHED_FILE = "await readAgentMessageFile(messageFile, false, opts.timeout);";
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -68,13 +78,15 @@ export function patchAgentMessageInput(source: string): string {
   const restored = region
     .replace(PATCHED_OPEN, ORIGINAL_OPEN)
     .replace(PATCHED_MESSAGE, ORIGINAL_MESSAGE)
-    .replace(PATCHED_READ, ORIGINAL_READ);
+    .replace(PATCHED_READ, ORIGINAL_READ)
+    .replace(PATCHED_FILE, ORIGINAL_FILE);
   if (digest(restored) !== "6ac2ff76ee85a5a9fd957a920a812325d77979a6ee02255c148a9dc96ca92e32")
     throw new Error("Unrecognized native OpenClaw agent message parser");
   const patched = restored
     .replace(ORIGINAL_OPEN, PATCHED_OPEN)
     .replace(ORIGINAL_MESSAGE, PATCHED_MESSAGE)
-    .replace(ORIGINAL_READ, PATCHED_READ);
+    .replace(ORIGINAL_READ, PATCHED_READ)
+    .replace(ORIGINAL_FILE, PATCHED_FILE);
   if (source.includes(MARKER)) {
     if (
       region !== patched ||

@@ -49,6 +49,8 @@ function parser(
         },
       },
       Buffer,
+      setTimeout,
+      clearTimeout,
       readFileDescriptorBounded: read,
       MESSAGE_FILE_DECODER: new TextDecoder("utf-8", { fatal: true }),
       formatCliCommand: (value: string) => value,
@@ -98,6 +100,67 @@ resolveAgentMessageOpts({}).then(({message}) => console.log(message)).catch((err
       child.kill("SIGKILL");
     }
   });
+  it.each([
+    [undefined, false],
+    ["0", false],
+    ["1", false],
+    ["-1", false],
+    ["invalid", false],
+    ["1", true],
+  ] as const)(
+    "exits when stdin stays open (timeout: %s, explicit file: %s)",
+    async (timeout, explicit) => {
+      const source = patchAgentMessageInput(native).replace(/^import .*;\n/u, "");
+      const child = spawn(
+        process.execPath,
+        [
+          "-e",
+          `
+const nemoclawStdinStat = () => require('node:fs').fstatSync(0);
+const MESSAGE_FILE_DECODER = new TextDecoder('utf-8', {fatal: true});
+const formatCliCommand = (value) => value;
+const fs = { open: async () => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); }, stat: async () => nemoclawStdinStat() };
+const schedule = globalThis.setTimeout;
+globalThis.setTimeout = (callback, delay) => {
+  console.log('budget:' + delay);
+  return schedule(callback, 50);
+};
+${source}
+console.log('ready');
+resolveAgentMessageOpts(${JSON.stringify({ timeout, ...(explicit ? { messageFile: "/dev/stdin" } : {}) })}).catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
+`,
+        ],
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+      const output: Buffer[] = [];
+      const errors: Buffer[] = [];
+      child.stdout.on("data", (chunk) => output.push(chunk));
+      child.stderr.on("data", (chunk) => errors.push(chunk));
+      child.stdout.once("data", () => child.stdin.write("ping"));
+      const deadline = setTimeout(() => child.kill("SIGKILL"), 1500);
+      try {
+        const code = await new Promise<number | null>((resolve, reject) => {
+          child.once("error", reject);
+          child.once("close", resolve);
+        });
+        expect(code).toBe(1);
+        expect(Buffer.concat(output).toString()).toBe(
+          `ready\nbudget:${timeout === "1" ? 1000 : 30000}\n`,
+        );
+        expect(Buffer.concat(errors).toString()).toContain("Timed out waiting for stdin");
+        expect(Buffer.concat(errors).toString()).toContain("close the producer");
+        expect(Buffer.concat(errors).toString()).toContain("--message");
+        expect(Buffer.concat(errors).toString()).toContain("--timeout");
+      } finally {
+        clearTimeout(deadline);
+        child.kill("SIGKILL");
+      }
+    },
+  );
+
   it.each([false, true])("accepts implicit stdin (JSON: %s) (#13130)", async (json) => {
     const { resolve } = parser();
     await expect(resolve({ agent: "main", json })).resolves.toEqual({
