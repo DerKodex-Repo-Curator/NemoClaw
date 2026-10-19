@@ -668,7 +668,8 @@ COPY nemoclaw-blueprint/ /opt/nemoclaw-blueprint/
 
 FROM scratch AS openclaw-patch-payload
 
-COPY scripts/patch-openclaw-tool-catalog.mts scripts/lib/patch-openclaw-container-restart.mts scripts/lib/patch-openclaw-agent-message-input.mts /usr/local/lib/nemoclaw/
+COPY scripts/patch-openclaw-tool-catalog.mts /usr/local/lib/nemoclaw/patch-openclaw-tool-catalog.mts
+COPY scripts/lib/patch-openclaw-container-restart.mts scripts/lib/patch-openclaw-agent-message-input.mts /usr/local/lib/nemoclaw/
 COPY scripts/lib/patch-openclaw-npm12-pack-json.mts /usr/local/lib/nemoclaw/npm12.mts
 COPY scripts/patch-openclaw-mcp-npx.mts /usr/local/lib/nemoclaw/patch-openclaw-mcp-npx.mts
 COPY scripts/patch-openclaw-mcp-reliability.mts /usr/local/lib/nemoclaw/patch-openclaw-mcp-reliability.mts
@@ -898,7 +899,6 @@ COPY --from=openclaw-patch-payload / /
 RUN chmod 755 /usr/local/lib/nemoclaw/patch-openclaw-tool-catalog.mts \
         /usr/local/lib/nemoclaw/npm12.mts \
         /usr/local/lib/nemoclaw/patch-openclaw-container-restart.mts \
-        /usr/local/lib/nemoclaw/patch-openclaw-agent-message-input.mts \
         /usr/local/lib/nemoclaw/patch-openclaw-mcp-npx.mts \
         /usr/local/lib/nemoclaw/patch-openclaw-mcp-reliability.mts \
         /usr/local/lib/nemoclaw/patch-openclaw-mcp-tools-list-timeout.mts \
@@ -1424,7 +1424,7 @@ RUN set -eu; \
     if grep -REq --include='*.js' 'DEFAULT_PREAUTH_HANDSHAKE_TIMEOUT_MS = (1e4|15e3)' "$OC_DIST"; then echo "ERROR: Patch 5 left a short handshake-timeout constant" >&2; exit 1; fi; \
     if ! grep -REq --include='*.js' 'DEFAULT_PREAUTH_HANDSHAKE_TIMEOUT_MS = 6e4' "$OC_DIST"; then echo "ERROR: Patch 5 did not find patched 6e4 constant" >&2; exit 1; fi
 
-# Apply restart and stdin bridges; scripts document removal.
+# Native OpenClaw restart must reload; repair stdin input too.
 # hadolint ignore=DL3059
 RUN set -e; for patch in container-restart agent-message-input; do \
     node "/usr/local/lib/nemoclaw/patch-openclaw-${patch}.mts" /usr/local/lib/node_modules/openclaw/dist; \
