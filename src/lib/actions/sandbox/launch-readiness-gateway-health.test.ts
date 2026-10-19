@@ -16,6 +16,13 @@ import {
   requireNativeInferenceHealth,
   type LaunchReadinessHealthDeps,
 } from "./launch-readiness/health";
+import { probeSandboxInferenceInvocation } from "./inference-invocation-probe";
+import { runSandboxInferenceInvocationProbe } from "./inference-route-health";
+import {
+  NATIVE_LOCAL_CREDENTIAL_HANDLE,
+  nativeLocalReceipt,
+  recordingProbeShell,
+} from "../../../../test/helpers/native-local-probe-shell";
 import {
   isSandboxGatewayRunningForStatus,
   waitForStartedHermesGatewayProcess,
@@ -446,5 +453,89 @@ describe("Hermes native-local readiness authority", () => {
         nativeLocalProviderAttachment: input.entry.nativeLocalProviderAttachment,
       }),
     );
+  });
+});
+
+describe("OpenClaw native-local readiness identity (#13338)", () => {
+  it.each([
+    { agentName: undefined, agent: "openclaw" },
+    { agentName: undefined, agent: undefined },
+    { agentName: "openclaw", agent: "openclaw" },
+  ])(
+    "sends the health request to the recorded endpoint (selected $agentName, recorded $agent)",
+    async ({ agentName, agent }) => {
+      const receipt = nativeLocalReceipt({
+        provider: "llama-cpp-local",
+        agent: "openclaw",
+        endpointUrl: "http://host.openshell.internal:8081/v1",
+        credentialEnv: "NEMOCLAW_LOCAL_INFERENCE_TOKEN",
+        authMode: "authenticated",
+        gatewayName: "selected",
+        sandboxName: "alpha",
+      });
+      const shell = recordingProbeShell("200", '{"choices":[{"message":{"content":"OK"}}]}');
+      await expect(
+        requireNativeInferenceHealth({
+          sandboxName: "alpha",
+          gatewayName: "selected",
+          ...(agentName ? { agentName } : {}),
+          entry: {
+            name: "alpha",
+            ...(agent ? { agent } : {}),
+            provider: "llama-cpp-local",
+            model: "local-model",
+            nativeLocalProviderAttachment: receipt,
+          },
+          deps: {
+            verifyNativeLocalAttachment: vi.fn(async () => {}),
+            inferenceInvocationProbe: (input) =>
+              runSandboxInferenceInvocationProbe(input, (selected, _deps, timeoutMs) =>
+                probeSandboxInferenceInvocation(selected, { execute: shell.execute }, timeoutMs),
+              ),
+          },
+        }),
+      ).resolves.toBe(true);
+      expect(shell.destinations()).toEqual([
+        "http://host.openshell.internal:8081/v1/chat/completions",
+      ]);
+      expect(shell.requests[0]).toContain(
+        `Authorization: Bearer ${NATIVE_LOCAL_CREDENTIAL_HANDLE}`,
+      );
+    },
+  );
+
+  it("rejects a selected agent that contradicts the recorded attachment before any request", async () => {
+    const receipt = nativeLocalReceipt({
+      provider: "llama-cpp-local",
+      agent: "openclaw",
+      endpointUrl: "http://host.openshell.internal:8081/v1",
+      credentialEnv: "NEMOCLAW_LOCAL_INFERENCE_TOKEN",
+      authMode: "authenticated",
+      gatewayName: "selected",
+      sandboxName: "alpha",
+    });
+    const shell = recordingProbeShell("200", '{"choices":[{"message":{"content":"OK"}}]}');
+    await expect(
+      requireNativeInferenceHealth({
+        sandboxName: "alpha",
+        gatewayName: "selected",
+        agentName: "pi",
+        entry: {
+          name: "alpha",
+          agent: "pi",
+          provider: "llama-cpp-local",
+          model: "local-model",
+          nativeLocalProviderAttachment: receipt,
+        },
+        deps: {
+          verifyNativeLocalAttachment: vi.fn(async () => {}),
+          inferenceInvocationProbe: (input) =>
+            runSandboxInferenceInvocationProbe(input, (selected, _deps, timeoutMs) =>
+              probeSandboxInferenceInvocation(selected, { execute: shell.execute }, timeoutMs),
+            ),
+        },
+      }),
+    ).rejects.toBeInstanceOf(LaunchReadinessObservationError);
+    expect(shell.requests).toEqual([]);
   });
 });

@@ -1606,11 +1606,16 @@ function printUnrecoverableInferenceRoute(
   sandboxName: string,
   route: string,
   detail: string,
-  { repairAttempted = true }: { repairAttempted?: boolean } = {},
+  {
+    repairAttempted = true,
+    nativeProvider = false,
+  }: { repairAttempted?: boolean; nativeProvider?: boolean } = {},
 ): void {
   const reason = repairAttempted
     ? `inference.local is still unavailable inside '${sandboxName}' after DNS and route repair.`
-    : `the authoritative inference.local probe inside '${sandboxName}' did not return a trusted result.`;
+    : nativeProvider
+      ? `the attached native provider inference probe inside '${sandboxName}' did not return a trusted result.`
+      : `the authoritative inference.local probe inside '${sandboxName}' did not return a trusted result.`;
   const boundedDetail = sanitizeRouteValueForDisplay(redact(detail))
     .replace(/\s+/g, " ")
     .trim()
@@ -1708,6 +1713,7 @@ async function ensureSandboxInferenceRouteUnlocked(
 ): Promise<SandboxInferenceRouteEnsureResult> {
   let sb: SandboxEntry | null = null;
   let inference: ReturnType<typeof registry.getSandboxEntryInference> | null = null;
+  let nativeProvider = false;
   try {
     sb = readConnectSandbox(sandboxName);
     if (!sb) return { sandbox: null, routeHealthy: null };
@@ -1719,6 +1725,7 @@ async function ensureSandboxInferenceRouteUnlocked(
     const gatewayName = getPersistedSandboxTargetGatewayName(sb);
     const nativeAttachment = getNativeProviderAttachment(sb);
     if (nativeAttachment || sb.nativeLocalProviderAttachment !== undefined) {
+      nativeProvider = true;
       await requireNativeInferenceHealth({
         sandboxName,
         gatewayName,
@@ -1863,7 +1870,7 @@ async function ensureSandboxInferenceRouteUnlocked(
         sandboxName,
         `${sanitizeRouteValueForDisplay(inference.provider)}/${sanitizeRouteValueForDisplay(inference.model)}`,
         detail,
-        { repairAttempted: false },
+        { repairAttempted: false, nativeProvider },
       );
     }
     return { sandbox: sb, routeHealthy: false };

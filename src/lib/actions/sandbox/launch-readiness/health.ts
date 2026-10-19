@@ -250,7 +250,7 @@ export async function requireNativeInferenceHealth(input: {
     )({
       sandboxName: input.sandboxName,
       gatewayName: input.gatewayName,
-      agentName: input.agentName,
+      agentName: input.agentName ?? input.entry.agent ?? undefined,
       provider: expected.provider,
       model: input.entry.model,
       preferredInferenceApi: "openai-completions",

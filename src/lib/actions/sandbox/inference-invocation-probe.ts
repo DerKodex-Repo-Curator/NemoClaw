@@ -109,6 +109,22 @@ function nativeProbeDefinition(input: SandboxInferenceInvocationInput) {
   return hostedNativeProvider(input.provider, input.nativeEndpointUrl);
 }
 
+/**
+ * A native local attachment records the agent that owns it. Callers that omit
+ * the agent, such as OpenClaw's legacy null session agent, use that recorded
+ * agent. A supplied agent that contradicts it is rejected before any request.
+ */
+function probeAgentName(
+  input: SandboxInferenceInvocationInput,
+  local: NativeLocalProviderAttachment | undefined,
+): string | null | undefined {
+  if (!local) return input.agentName;
+  const supplied = input.agentName ?? undefined;
+  if (local.agent && supplied && supplied !== local.agent)
+    throw new Error("Native local inference probe agent does not match the recorded attachment.");
+  return supplied ?? local.agent;
+}
+
 /** Build the protocol-specific request used to verify sandbox inference. */
 function buildProbeRequest(input: SandboxInferenceInvocationInput): {
   endpoint: string;
@@ -130,8 +146,11 @@ function buildProbeRequest(input: SandboxInferenceInvocationInput): {
     input.preferredInferenceApi,
     input.nativeProvider ?? Boolean(local),
     local?.endpointUrl ?? input.nativeEndpointUrl ?? null,
-    input.agentName,
+    probeAgentName(input, local),
   );
+  // A native local attachment never falls back to the shared inference.local route.
+  if (local && config.inferenceBaseUrl !== local.endpointUrl)
+    throw new Error("Native local inference probe has no agent that owns the recorded attachment.");
   const useNativeNvidia = input.nativeProvider === true && isNativeNvidiaProvider(input.provider);
   const hosted = nativeProbeDefinition(input);
   const nativeHosted = input.nativeProvider === true ? hosted : undefined;
@@ -331,15 +350,14 @@ export async function probeSandboxInferenceInvocation(
     const statusText = (separator >= 0 ? result.stdout.slice(0, separator) : result.stdout).trim();
     const httpStatus = /^2\d\d$/.test(statusText) ? Number.parseInt(statusText, 10) : null;
     const body = separator >= 0 ? result.stdout.slice(separator + 1) : "";
+    const local = normalizeNativeLocalProviderAttachment(input.nativeLocalProviderAttachment);
     const inferenceApi = getSandboxInferenceConfig(
       input.model,
       input.provider,
       input.preferredInferenceApi,
       input.nativeProvider ?? Boolean(input.nativeLocalProviderAttachment),
-      normalizeNativeLocalProviderAttachment(input.nativeLocalProviderAttachment)?.endpointUrl ??
-        input.nativeEndpointUrl ??
-        null,
-      input.agentName,
+      local?.endpointUrl ?? input.nativeEndpointUrl ?? null,
+      probeAgentName(input, local),
     ).inferenceApi;
     if (httpStatus !== null && validateInferenceResponseBody(inferenceApi, body).ok) {
       return { ok: true };

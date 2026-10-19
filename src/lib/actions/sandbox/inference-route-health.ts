@@ -438,7 +438,11 @@ export function buildSandboxInferenceRouteHealth(
       ok: invocation?.ok === true,
       probed: invocation !== null,
       providerLabel: "Native local inference",
-      endpoint: `${context.nativeLocalEndpoint}/chat/completions`,
+      // Report the request that actually failed, not only the recorded label.
+      endpoint:
+        invocation && !invocation.ok && invocation.endpoint
+          ? invocation.endpoint
+          : `${context.nativeLocalEndpoint}/chat/completions`,
       detail: invocation?.ok
         ? "The attached provider served a native local inference request."
         : invocation
@@ -569,8 +573,19 @@ export async function runSandboxInferenceInvocationProbe(
       // An abnormal probe still failed against the selected API family's path.
       // Without this the row falls back to the models route and misdirects
       // recovery to a request that never ran (#10879).
-      endpoint: resolveSandboxInferenceInvocationEndpoint(input),
+      ...attemptedInvocationEndpoint(input),
     };
+  }
+}
+
+// A probe rejected before building its request has no attempted endpoint.
+function attemptedInvocationEndpoint(input: SandboxInferenceInvocationInput): {
+  endpoint?: string;
+} {
+  try {
+    return { endpoint: resolveSandboxInferenceInvocationEndpoint(input) };
+  } catch {
+    return {};
   }
 }
 

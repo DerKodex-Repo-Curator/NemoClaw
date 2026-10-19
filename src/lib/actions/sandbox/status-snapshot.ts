@@ -768,7 +768,12 @@ export async function collectSandboxStatusSnapshot(
                   {
                     sandboxName,
                     gatewayName: gatewayName ?? undefined,
-                    ...(sb?.agent === "langchain-deepagents-code" ? { agentName: sb.agent } : {}),
+                    // A native local request keeps the recorded agent identity.
+                    ...(sb?.agent &&
+                    (sb.agent === "langchain-deepagents-code" ||
+                      sb.nativeLocalProviderAttachment !== undefined)
+                      ? { agentName: sb.agent }
+                      : {}),
                     provider: invocationProvider,
                     model: invocationModel,
                     preferredInferenceApi: invocationRoute.preferredInferenceApi,
